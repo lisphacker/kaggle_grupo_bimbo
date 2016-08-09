@@ -34,3 +34,4 @@ vignettes/*.pdf
 
 # Data directories
 /data/
+.Rproj.user
