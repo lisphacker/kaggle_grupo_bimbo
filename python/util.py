@@ -26,9 +26,9 @@ def partition(df, partition_sizes):
     xver_indices = np.random.choice(indices, int(xver_size))
     test_indices = np.random.choice(indices, int(test_size))
 
-    train = data.iloc[train_indices]
-    xver = data.iloc[xver_indices]
-    test = data.iloc[test_indices]
+    train = df.iloc[train_indices]
+    xver = df.iloc[xver_indices]
+    test = df.iloc[test_indices]
     
     return train, xver, test
 

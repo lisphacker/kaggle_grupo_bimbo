@@ -1,3 +1,4 @@
+import sys
 import re
 import numpy as np
 import pandas as pd
@@ -141,13 +142,16 @@ def make_wordvec_dataset(df, ps):
         print(row)
         print(row.product_id)
 
-def build_trinout(vectorizer, product_matrix, id2idx_map, df):
+def build_trinout(vectorizer, product_matrix, id2idx_map, df, skip_output=False):
     num_features = len(vectorizer.get_feature_names())
     num_rows = df.shape[0]
 
     print('Creating SVM matrices')
     trin = lil_matrix((num_rows, num_features + 2), dtype='float32')
-    trout = np.ndarray(num_rows, dtype='float32')
+    if not skip_output:
+        trout = np.ndarray(num_rows, dtype='float32')
+    else:
+        trout = None
 
     print('Populating SVM matrices')
     
@@ -158,7 +162,8 @@ def build_trinout(vectorizer, product_matrix, id2idx_map, df):
         trin[i, 1] = row.returns_units_next_week
         trin[i, 2:(num_features+2)] = product_matrix[id2idx_map[product_id], :]
 
-        trout[i] = df.iloc[i].adjusted_demand
+        if not skip_output:
+            trout[i] = df.iloc[i].adjusted_demand
 
     return trin, trout
     
@@ -196,3 +201,112 @@ def quick_test(vectorizer, product_matrix, id2idx_map, train, test):
     svm = train_svm(vectorizer, product_matrix, id2idx_map, train)
     test_svm(svm, vectorizer, product_matrix, id2idx_map, test)
 
+def predict_svm(svm, vectorizer, product_matrix, id2idx_map, df):
+    trin, _ = build_trinout(vectorizer, product_matrix, id2idx_map, df, True)
+
+    print('Predicting')
+    trout = svm.predict(trin)
+
+    for id_, pred in zip(df.id, trout):
+        print(id_, pred)
+
+
+import code
+
+class SVMModel:
+    def __init__(self, products):
+        self.svm = None
+
+        self.vectorizer, self.product_matrix = get_product_name_feature_matrix(products)
+        self.id2idx_map = make_id2idx_map(products)
+
+    def train(self, train):
+        self.build_training_data(train)
+        
+        input, output = self.build_svm_data(self.vectorizer, self.product_matrix, self.id2idx_map, train)
+        
+        self.svm = SVR()
+        #svm = SVR(kernel='sigmoid')
+
+        print('Training SVM')
+        self.svm.fit(input, output)
+
+    def test(self, test):
+        input, ref = self.build_svm_data(self.vectorizer, self.product_matrix, self.id2idx_map, test)
+
+        print('Predicting')
+        output = self.svm.predict(input)
+
+        #code.interact(local=locals())
+
+        s = 0
+        for r, o in zip(ref, output):
+            if o < 0:
+                print(r, o)
+                o = 0
+            d = np.log(o + 1) - np.log(r + 1)
+
+            s += d * d
+        
+        s /= len(output)
+        return np.sqrt(s)
+
+    def build_training_data(self, train):
+        print('Building training data')
+        
+        self.sch_prod_2_demand_map = dict()
+        
+        for row in train.itertuples():
+            t = (row.client_id, row.product_id)
+            if t not in self.sch_prod_2_demand_map:
+                self.sch_prod_2_demand_map[t] = (row.adjusted_demand, 1)
+            else:
+                t2 = self.sch_prod_2_demand_map[t]
+                self.sch_prod_2_demand_map[t] = (t2[0] + row.adjusted_demand, t2[1] + 1)
+
+        for k in self.sch_prod_2_demand_map:
+            t = self.sch_prod_2_demand_map[k]
+            self.sch_prod_2_demand_map[k] = t[0] / t[1]
+        
+        
+    def build_svm_data(self, vectorizer, product_matrix, id2idx_map, df, skip_output=False):
+        num_features = len(vectorizer.get_feature_names())
+        num_rows = df.shape[0]
+
+        print('Creating SVM matrices')
+        input = lil_matrix((num_rows, num_features + 2), dtype='float32')
+        if not skip_output:
+            output = np.ndarray(num_rows, dtype='float32')
+        else:
+            output = None
+
+        print('Populating SVM matrices')
+            
+        for i in range(num_rows):
+            row = df.iloc[i]
+            product_id = row.product_id
+
+            t = (row.client_id, row.product_id)
+            if t in self.sch_prod_2_demand_map:
+                demand = self.sch_prod_2_demand_map[t]
+            else:
+                demand = 0
+                print(i, 0)
+            
+            input[i, 0] = demand
+            input[i, 1] = row.client_id
+            n = 2
+            input[i, n:(num_features+n)] = product_matrix[id2idx_map[product_id], :]
+
+            if not skip_output:
+                output[i] = df.iloc[i].adjusted_demand
+
+        return input, output
+
+def qt():
+    global products, train, test
+    m = SVMModel(products)
+    m.train(train)
+    print(m.test(test))
+
+    

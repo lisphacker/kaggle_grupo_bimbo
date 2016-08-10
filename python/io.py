@@ -9,3 +9,5 @@ def load_testing_data():
 def load_products():
     return pd.read_hdf('../data/python/products.h5')
 
+def load():
+    return load_training_data(), load_testing_data(), load_products()
