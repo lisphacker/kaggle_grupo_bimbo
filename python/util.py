@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 def compute_delta(train):
-    train['delta'] = train.sales_units_this_week - train.adjusted_demand
+    train['error'] = train.sales_units_this_week - train.adjusted_demand
 
 def cat(series):
     return series.astype('category')

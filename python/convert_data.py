@@ -51,3 +51,5 @@ def load_town_state_csv_file():
                               'town':np.str_,
                               'state':np.str_})
                        
+def clean_duplicates(train):
+    return train.groupby(['client_id', 'product_id', 'week_num']).first()
